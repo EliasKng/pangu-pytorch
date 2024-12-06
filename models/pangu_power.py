@@ -1,13 +1,11 @@
 import sys
 import os
 from typing import List, Tuple, Optional, Union
-from torch import Tensor
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import torch
 from models.layers import (
     PatchRecoveryPowerSurface_2,
-    PatchRecovery_pretrain,
     PowerConv,
 )
 from era5_data.config import cfg
@@ -36,18 +34,17 @@ class PanguPowerPatchRecovery(PanguModel):
         # Delete the pangu output layer
         del self._output_layer
 
-        # Replace the output layer with PatchRecovery_transfer
-        self._output_weather_layer = PatchRecovery_pretrain(dims[-2])
+        # Replace the output layer with new PatchRecovery
         self._output_power_layer = PatchRecoveryPowerSurface_2(dims[-2])
 
     def forward(
         self,
-        input: Tensor,
-        input_surface: Tensor,
-        statistics: Tensor,
-        maps: Tensor,
-        const_h: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
+        input: torch.Tensor,
+        input_surface: torch.Tensor,
+        statistics: torch.Tensor,
+        maps: torch.Tensor,
+        const_h: torch.Tensor,
+    ) -> torch.Tensor:
         """Backbone architecture"""
         # Embed the input fields into patches
         # input:(B, N, Z, H, W) ([1, 5, 13, 721, 1440])input_surface(B,N,H,W)([1, 4, 721, 1440])
@@ -81,13 +78,10 @@ class PanguPowerPatchRecovery(PanguModel):
         # Skip connect, in last dimension(C from 192 to 384)
         x = torch.cat((skip, x), dim=-1)
 
-        # Calculate weather output (just for visualization)
-        output_upper, output_surface = self._output_weather_layer(x, 8, 181, 360)
-
         # Recover the output fields from patches
         output = self._output_power_layer(x, 8, 181, 360)
 
-        return output, output_surface
+        return output
 
     def load_pangu_state_dict(self, device: torch.device) -> None:
         """Get the prepared state dict of the pretrained pangu weights"""
@@ -183,7 +177,7 @@ class PanguPowerConv(PanguModel):
         output_power = self._conv_power_layers(output_upper, output_surface)
 
         # Return output_surface for visualization purposes only
-        return output_power, output_surface
+        return output_power
 
     def load_pangu_state_dict(self, device: torch.device) -> None:
         checkpoint = torch.load(

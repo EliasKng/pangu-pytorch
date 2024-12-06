@@ -85,7 +85,7 @@ def test(test_loader, model, device, res_path):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{timestamp}] predict on {id}")
         (
-            input_test,
+            input_upper_test,
             input_surface_test,
             input_power_test,
             target_power_test,
@@ -94,16 +94,16 @@ def test(test_loader, model, device, res_path):
             periods_test,
         ) = data
 
-        input_test, input_surface_test, target_power_test = (
-            input_test.to(device),
+        input_upper_test, input_surface_test, target_power_test = (
+            input_upper_test.to(device),
             input_surface_test.to(device),
             target_power_test.to(device),
         )
         model.eval()
 
         # Inference
-        output_power_test, output_surface_test = model_inference_power(
-            model, input_test, input_surface_test, aux_constants
+        output_power_test = model_inference_power(
+            model, input_upper_test, input_surface_test, aux_constants
         )
 
         # Apply lsm
@@ -118,8 +118,9 @@ def test(test_loader, model, device, res_path):
             output_power_test,
             target_power_test,
             input_surface_test,
-            output_surface_test,
+            input_upper_test,
             target_surface_test,
+            target_upper_test,
             target_time,
             png_path,
         )
@@ -211,13 +212,18 @@ def test_baseline(test_loader, pangu_model, device, res_path, baseline_type: str
         # Visualize
         target_time = periods_test[1][0]
         png_path = os.path.join(res_path, "png")
+
+        # This can be used to pre-generate pangu outputs, which are required for some visualizations
+        # save_output_pth(output_weather_upper, output_weather_surface, target_time, res_path)
+
         utils.mkdirs(png_path)
         visualize(
             output_power_test,
             target_power_test,
             input_surface_test,
-            output_weather_surface,
+            input_test,
             target_surface_test,
+            target_upper_test,
             target_time,
             png_path,
             input_power=input_power_test,

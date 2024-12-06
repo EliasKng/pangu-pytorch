@@ -34,9 +34,9 @@ def model_inference_power(
     input: torch.Tensor,
     input_surface: torch.Tensor,
     aux_constants: Dict[str, torch.Tensor],
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Inference code for power models. Same as inference for pangu, but only surface output is transformed."""
-    output_power, output_surface = model(
+) -> torch.Tensor:
+    """Inference code for power models."""
+    output_power = model(
         input,
         input_surface,
         aux_constants["weather_statistics"],
@@ -44,12 +44,7 @@ def model_inference_power(
         aux_constants["const_h"],
     )
 
-    # Transfer to the output to the original data range. Only for surface, power doesn't need to be transformed
-    output_surface = utils_data.normBackDataSurface(
-        output_surface, aux_constants["weather_statistics_last"]
-    )
-
-    return output_power, output_surface
+    return output_power
 
 
 def model_inference_pangu(
@@ -58,7 +53,7 @@ def model_inference_pangu(
     input_surface: torch.Tensor,
     aux_constants: Dict[str, torch.Tensor],
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Inference for the Pangu model."""
+    """Inference for the Pangu model. Pangu outputs are normalized."""
     output_upper, output_surface = model(
         input,
         input_surface,
@@ -139,34 +134,71 @@ def calculate_loss(output, target, criterion, lsm_expanded):
 
 
 def visualize(
-    output_power,
-    target_power,
-    input_surface,
-    output_surface,
-    target_surface,
-    step,
-    path,
-    input_power=None,
-):
+    output_power: torch.Tensor,
+    target_power: torch.Tensor,
+    input_surface: torch.Tensor,
+    input_upper: torch.Tensor,
+    target_surface: torch.Tensor,
+    target_upper: torch.Tensor,
+    step: str,
+    path: str,
+    input_power: Optional[torch.Tensor] = None,
+    epoch: Optional[int] = None,
+) -> None:
+    """For docsctring, find utils.visuailze_all function"""
     if input_power is not None:
         input_power = input_power.detach().cpu().squeeze()
+
+    # Load pre-generated pangu outputs for visualization
+    output_upper, output_surface = utils.load_pangu_output(step)
+
     utils.visuailze_all(
         output_power.detach().cpu().squeeze(),
         target_power.detach().cpu().squeeze(),
         input_surface.detach().cpu().squeeze(),
+        input_upper.detach().cpu().squeeze(),
         output_surface.detach().cpu().squeeze(),
+        output_upper.detach().cpu().squeeze(),
         target_surface.detach().cpu().squeeze(),
+        target_upper.detach().cpu().squeeze(),
         step=step,
         path=path,
         input_power=input_power,
+        epoch=epoch,
     )
 
 
-def save_output_and_target(output_test, target_test, target_time, res_path):
+def save_output_pth(
+    output_upper: torch.Tensor,
+    output_surface: torch.Tensor,
+    target_time: str,
+    res_path: str,
+) -> None:
+    """
+    Save the pangu output tensors to .pth files, those are used visualization purposes.
+    Parameters
+    ----------
+    output_upper : torch.Tensor
+        The tensor containing the upper level pangu output data.
+    output_surface : torch.Tensor
+        The tensor containing the surface level pangu output data.
+    target_time : str
+        The target time string used to name the output files.
+    res_path : str
+        The path to the directory where the output files will be saved.
+    Returns
+    -------
+    None
+    """
+
     output_path = os.path.join(res_path, "model_output")
     utils.mkdirs(output_path)
-    torch.save(output_test, os.path.join(output_path, f"output_{target_time}.pth"))
-    torch.save(target_test, os.path.join(output_path, f"target_{target_time}.pth"))
+    torch.save(
+        output_upper, os.path.join(output_path, f"output_upper_{target_time}.pth")
+    )
+    torch.save(
+        output_surface, os.path.join(output_path, f"output_surface_{target_time}.pth")
+    )
 
 
 def train(
@@ -292,9 +324,7 @@ def train_one_epoch(
 
         optimizer.zero_grad()
         model.train()
-        output_power, output_surface = model_inference_power(
-            model, input, input_surface, aux_constants
-        )
+        output_power = model_inference_power(model, input, input_surface, aux_constants)
         lsm_expanded = load_land_sea_mask(output_power.device)
         loss = calculate_loss(output_power, target_power, criterion, lsm_expanded)
         loss.backward()
@@ -358,7 +388,7 @@ def validate(
         val_loss = 0.0
         for id, val_data in enumerate(val_loader, 0):
             (
-                input_val,
+                input_upper_val,
                 input_surface_val,
                 input_power_val,
                 target_power_val,
@@ -366,14 +396,14 @@ def validate(
                 target_surface_val,
                 periods_val,
             ) = val_data
-            input_val, input_surface_val, target_power_val = (
-                input_val.to(device),
+            input_upper_val, input_surface_val, target_power_val = (
+                input_upper_val.to(device),
                 input_surface_val.to(device),
                 target_power_val.to(device),
             )
             print(f"(V) Processing batch {id + 1}/{len(val_loader)}")
-            output_power_val, output_surface_val = model_inference_power(
-                model, input_val, input_surface_val, aux_constants
+            output_power_val = model_inference_power(
+                model, input_upper_val, input_surface_val, aux_constants
             )
             lsm_expanded = load_land_sea_mask(output_power_val.device)
             loss = calculate_loss(
@@ -391,10 +421,12 @@ def validate(
                 output_power_val,
                 target_power_val,
                 input_surface_val,
-                output_surface_val,
+                input_upper_val,
                 target_surface_val,
-                epoch,
+                target_upper_val,
+                periods_val[1][0],
                 png_path,
+                epoch=epoch,
             )
 
         if val_loss < best_loss:

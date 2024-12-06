@@ -17,12 +17,12 @@ assert __C.GLOBAL.PATH is not None
 __C.GLOBAL.SEED = 99
 __C.GLOBAL.NUM_STREADS = 16
 
+# Paths
 __C.PG_INPUT_PATH = os.path.join(__C.ROOT_DIR, "data")
 assert __C.PG_INPUT_PATH is not None
 
 __C.PG_OUT_PATH = os.path.join(__C.GLOBAL.PATH, "result")
 assert __C.PG_OUT_PATH is not None
-
 
 __C.ERA5_PATH = "/lsdf/kit/imk-tro/projects/Gruppe_Quinting/ec.era5/1959-2023_01_10-wb13-6h-1440x721.zarr"
 __C.POWER_PATH = (
@@ -35,6 +35,11 @@ __C.LSM_PATH = (
 # Mean Power path
 __C.MEAN_POWER_PATH = "/home/hk-project-test-mlperf/om1434/masterarbeit/wind_fusion/pangu_pytorch/data/aux_data/mean_power_per_grid_point.npy"
 __C.POWER_CURVE_PATH = "/home/hk-project-test-mlperf/om1434/masterarbeit/wind_fusion/pangu_pytorch/data/power_curves/wind_turbine_power_curves.csv"
+
+# Pangu pre-inferenced outputs: outputs that have been pre-inferenced with Pangu and are used for visualization
+__C.PANGU_INFERENCE_OUTPUTS = (
+    "/lsdf/kit/imk-tro/projects/Gruppe_Quinting/om1434/pangu_outputs"
+)
 
 __C.ERA5_UPPER_LEVELS = [
     "1000",

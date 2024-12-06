@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+from typing import Tuple, Optional
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from era5_data.config import cfg
@@ -223,28 +224,77 @@ def visuailze_power(output, target, input, step, path):
 
 
 def visuailze_all(
-    output_power,
-    target_power,
-    input,
-    output_pangu_surface,
-    target_pangu_surface,
-    step,
-    path,
-    input_power=None,
+    output_power: torch.Tensor,
+    target_power: torch.Tensor,
+    input_pangu_surface: torch.Tensor,
+    input_pangu_upper: torch.Tensor,
+    output_pangu_surface: torch.Tensor,
+    output_pangu_upper: torch.Tensor,
+    target_pangu_surface: torch.Tensor,
+    target_pangu_upper: torch.Tensor,
+    step: str,
+    path: str,
+    input_power: Optional[torch.Tensor] = None,
+    use_surface: bool = False,
+    z: int = 0,
+    epoch: Optional[int] = None,
 ):
-    """Visualizes both wind_speeds (pangu) and power predictions."""
-    variables = cfg.ERA5_SURFACE_VARIABLES
-    var1 = variables.index("u10")
-    var2 = variables.index("v10")
+    """Visualizes both wind_speeds (pangu) and power predictions.
 
-    input_ws = _calc_wind_speed(input[var1, :, :], input[var2, :, :])
-    target_ws = _calc_wind_speed(
-        target_pangu_surface[var1, :, :], target_pangu_surface[var2, :, :]
-    )
-    output_ws = _calc_wind_speed(
-        output_pangu_surface[var1, :, :], output_pangu_surface[var2, :, :]
-    )
+    Parameters
+    ----------
+    output_power, target_power, input_surface, input_upper, output_pangu_surface, output_pangu_upper, target_pangu_surface, target_pangu_upper: torch.Tensor
+        Tensors containing power forecast, power target, weather input, output and target for both surface and upper levels.
+    step : str
+        Target step (date & time) for the visualization: e.g. "2017051000" (YYYYMMDDHH).
+    path : str
+        Output path (folder) for the visualization.
+    input_power : Optional[torch.Tensor], optional
+        A tensor containing the power input. Power input is only used in the formula baseline model so far.
+    use_surface : bool, optional
+        Wether to visualize surface wind or upper level wind, by default False
+    z : int, optional
+        If upper level wind -> pressure level to visualize wind for 0 corresponds to 1000hPa. By default 0
+    epoch : Optional[int], optional
+        Is used during validation to save one plot per epoch, by default None
+    """
+    # Either visualize windspeeds at surface or upper level
+    if use_surface:
+        variables_surface = cfg.ERA5_SURFACE_VARIABLES
+        var_u_surface = variables_surface.index("u10")
+        var_v_surface = variables_surface.index("v10")
 
+        input_ws = _calc_wind_speed(
+            input_pangu_surface[var_u_surface, :, :],
+            input_pangu_surface[var_v_surface, :, :],
+        )
+        target_ws = _calc_wind_speed(
+            target_pangu_surface[var_u_surface, :, :],
+            target_pangu_surface[var_v_surface, :, :],
+        )
+        output_ws = _calc_wind_speed(
+            output_pangu_surface[var_u_surface, :, :],
+            output_pangu_surface[var_v_surface, :, :],
+        )
+    else:
+        variables_upper = cfg.ERA5_UPPER_VARIABLES
+        var_u_upper = variables_upper.index("u")
+        var_v_upper = variables_upper.index("v")
+
+        input_ws = _calc_wind_speed(
+            input_pangu_upper[var_u_upper, z, :, :],
+            input_pangu_upper[var_v_upper, z, :, :],
+        )
+        target_ws = _calc_wind_speed(
+            target_pangu_upper[var_u_upper, z, :, :],
+            target_pangu_upper[var_v_upper, z, :, :],
+        )
+        output_ws = _calc_wind_speed(
+            output_pangu_upper[var_u_upper, z, :, :],
+            output_pangu_upper[var_v_upper, z, :, :],
+        )
+
+    # Prepare data for visualization: cut out europe area and replace land area with NaN
     input_ws = prepare_europe(input_ws)
     target_ws = prepare_europe(target_ws)
     output_ws = prepare_europe(output_ws)
@@ -253,6 +303,7 @@ def visuailze_all(
     target_power = prepare_europe(target_power)
     output_power = prepare_europe(output_power)
 
+    # Calculate maximum bias for color scale (for 0 to be white)
     max_bias_ws = _calc_max_bias(output_ws, target_ws)
     max_bias_power = _calc_max_bias(output_power, target_power)
 
@@ -309,8 +360,34 @@ def visuailze_all(
     ax_8.title.set_text("bias[power]")
 
     plt.tight_layout()
-    plt.savefig(fname=os.path.join(path, "{}_power.pdf".format(step)))
+    if epoch is None:
+        plt.savefig(fname=os.path.join(path, "{}_power.pdf".format(step)))
+    else:
+        plt.savefig(fname=os.path.join(path, f"{step}_power_epoch{epoch}.pdf"))
     plt.close()
+
+
+def load_pangu_output(step: str) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Load pangu outputs for a given step.
+
+    Parameters
+    ----------
+    step : str
+        Target step (date & time): e.g. "2017051000" (YYYYMMDDHH).
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        Upper and surface level outputs which were generated by the pangu baseline model (24h).
+    """
+    output_path = cfg.PANGU_INFERENCE_OUTPUTS
+    output_upper = torch.load(
+        os.path.join(output_path, f"output_upper_{step}.pth"), weights_only=False
+    )
+    output_surface = torch.load(
+        os.path.join(output_path, f"output_surface_{step}.pth"), weights_only=False
+    )
+    return output_upper, output_surface
 
 
 def _calc_max_bias(output, target):

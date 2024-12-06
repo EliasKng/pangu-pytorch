@@ -376,7 +376,7 @@ def test_baselines(args, baseline_type):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--type_net", type=str, default="Test")
+    parser.add_argument("--type_net", type=str, default="Test_Vis")
     parser.add_argument(
         "--gpu_list",
         type=int,
@@ -395,7 +395,7 @@ if __name__ == "__main__":
     master_port = str(12357 + randrange(-10, 10, 1))
     print(f"Master port: {master_port}")
 
-    # # Spawn processes for distributed training
+    # Spawn processes for distributed training
     if args.dist and torch.cuda.is_available():
         mp.spawn(main, args=(args, world_size, master_port), nprocs=world_size)  # type: ignore
     else:
